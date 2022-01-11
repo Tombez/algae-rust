@@ -1,49 +1,63 @@
-extern crate websocket;
-
 pub mod algae {
     use std::{time};
     use std::time::Instant;
-    use websocket::server::WsServer;
-    use websocket::server::NoTlsAcceptor;
-    use std::net::{TcpListener, TcpStream};
-    use websocket::sync::{Server as SyncServer};
-    use websocket::OwnedMessage;
-    use std::net::SocketAddr;
-    use websocket::sync::Client as WsClient;
+    use simple_websockets::{Event, EventHub, Responder, Message};
+    use std::collections::HashMap;
 
+    fn string_at(bytes: &[u8], mut i: usize) -> &str {
+        let len = bytes.len();
+        while i < len {
+            if bytes[i] == 0 { break; }
+            i += 1;
+        }
+        let result = std::str::from_utf8(&bytes[1..i]);
+        match result {
+            Ok(s) => s,
+            _ => ""
+        }
+    }
+    struct Vec2<T> {
+        x: T,
+        y: T
+    }
+    impl<T> Vec2<T> {
+        pub fn assign(&mut self, x: T, y: T) {
+            self.x = x;
+            self.y = y;
+        }
+    }
     struct Player {
-
+        name: String,
+        mouse: Vec2<f32>
     }
     struct Client {
-        ws_client: WsClient<TcpStream>,
-        ip: SocketAddr,
-        should_close: bool
-        // receiver: Reader<TcpStream>,
-        // sender: Writer<TcpStream>
-        // player: Player
+        ws_client: Responder,
+        player: Option<Player>
     }
 
     impl Client {
-        pub fn new(ws_client: WsClient<TcpStream>, ip: SocketAddr) -> Client {
-            Client {
-                ws_client,
-                ip,
-                should_close: false
-            }
+        pub fn new(ws_client: Responder) -> Client {
+            Client { ws_client, player: None }
         }
     }
 
     pub struct Server {
-        ws_server: WsServer<NoTlsAcceptor, TcpListener>,
-        clients: Vec<Client>,
+        ws_server: EventHub,
+        clients: HashMap<u64, Client>,
         last_tick_instant: Instant,
+        last_id: u32
+    }
+    impl Default for Server {
+        fn default() -> Server {
+            Self::new()
+        }
     }
     impl Server {
         pub fn new() -> Server {
-            let ws_server = SyncServer::bind("127.0.0.1:8080").unwrap();
+            let ws_server = simple_websockets::launch(8080)
+            .expect("failed to listen on port 8080");
             let last_tick_instant = time::Instant::now();
-            let server = Server {ws_server, clients: vec![], last_tick_instant};
-            server
+            Server {ws_server, clients: HashMap::new(), last_tick_instant, last_id: 0}
         }
         pub fn start(&mut self) {
             loop { self.game_loop(); }
@@ -51,68 +65,65 @@ pub mod algae {
         fn game_loop(&mut self) {
             let inter_tick_duration = self.last_tick_instant.elapsed();
             if inter_tick_duration < std::time::Duration::new(0, 1_000_000_000 / 60) {
+                //println!("spinning because duration is not large enough: {:?}, min: {:?}", inter_tick_duration, std::time::Duration::new(0, 1_000_000_000 / 60));
                 return;
             }
             let frame_start = time::Instant::now();
-            self.clients.append(&mut Server::accept_new_connections(&mut self.ws_server));
-            Server::handle_client_messages(&mut self.clients);
-            // todo!("game logic");
-            // todo!("send updates to clients");
-            let tick_duration = frame_start.elapsed();
-            println!("finished tick with duration: {:?}", tick_duration);
-            self.last_tick_instant = frame_start;
-        }
-        fn accept_new_connections(ws_server: &mut WsServer<NoTlsAcceptor, TcpListener>) -> Vec<Client> {
-            let mut clients: Vec<Client> = vec![];
-            let filtered = ws_server.filter_map(Result::ok);
-            for request in filtered {
-                let ws_client = request.accept().unwrap();
-                let ip = ws_client.peer_addr().unwrap();
-                println!("Connection from ip: {}", ip);
 
-                // let (receiver, sender) = ws_client.split().unwrap();
-
-
-                clients.push(Client::new(ws_client, ip));
-            }
-            clients
-        }
-        fn handle_client_messages(clients: &mut Vec<Client>) {
-            for client in clients {
-                'outer: for result in client.ws_client.incoming_messages() {
-                    match result {
-                        Ok(message) => {
-                            println!("debug a");
-                            match message {
-                                OwnedMessage::Binary(data) => {
-                                    match data[0] {
-                                        16 => { // mouse input
+            loop {
+                match self.ws_server.next_event() {
+                    None => { break; },
+                    Some(event) => {
+                        match event {
+                            Event::Connect(client_id, responder) => {
+                                println!("A client connected with id #{}", client_id);
+                                let client = Client::new(responder);
+                                let msg = vec![2u8, 60u8, 200u8];
+                                client.ws_client.send(Message::Binary(msg));
+                                self.clients.insert(client_id, client);
+                            },
+                            Event::Disconnect(client_id) => {
+                                println!("Client #{} disconnected.", client_id);
+                                self.clients.remove(&client_id);
+                            },
+                            Event::Message(client_id, message) => {
+                                // println!("Received a message from client #{}: {:?}", client_id, message);
+                                let client = self.clients.get_mut(&client_id).unwrap();
+                                if let Message::Binary(bytes) = message {
+                                    let id = bytes[0];
+                                    match id {
+                                        254 => {
 
                                         }
+                                        255 => {
+
+                                        }
+                                        0 => {
+                                            let name = string_at(&bytes, 1);
+                                            println!("play msg name: {}", name);
+                                            let mouse = Vec2 {x: 0f32, y: 0f32};
+                                            let player = Player {name: name.to_string(), mouse};
+                                            client.player = Some(player);
+                                        }
+                                        16 => {
+                                            //todo! handle mouse input
+                                        },
                                         _ => {
-                                            println!("unknown packet id: {}", data[0]);
+                                            println!("unknown message id: {}, msg: {:?}", id, bytes);
                                         }
                                     }
-                                },
-                                _ => {
-                                    println!("received unknown message: {:?}", message);
-                                    client.should_close = true;
                                 }
-                            }
-                        }
-                        Err(error) => {
-                            match error {
-                                websocket::WebSocketError::NoDataAvailable => {
-                                break 'outer;
-                                },
-                                _ => {
-                                    println!("read websocket message error: {}", error);
-                                }
-                            }
+                            },
                         }
                     }
                 }
             }
+
+            // todo!("game logic");
+            // todo!("send updates to clients");
+            let _tick_duration = frame_start.elapsed();
+            // println!("finished tick with duration: {:?}", tick_duration);
+            self.last_tick_instant = frame_start;
         }
     }
 }
