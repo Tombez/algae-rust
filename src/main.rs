@@ -1,8 +1,11 @@
+mod vec2;
+
 pub mod algae {
     use std::{time};
     use std::time::Instant;
     use simple_websockets::{Event, EventHub, Responder, Message};
     use std::collections::HashMap;
+    use crate::vec2::Vec2;
 
     fn string_at(bytes: &[u8], mut i: usize) -> &str {
         let len = bytes.len();
@@ -14,16 +17,6 @@ pub mod algae {
         match result {
             Ok(s) => s,
             _ => ""
-        }
-    }
-    struct Vec2<T> {
-        x: T,
-        y: T
-    }
-    impl<T> Vec2<T> {
-        pub fn assign(&mut self, x: T, y: T) {
-            self.x = x;
-            self.y = y;
         }
     }
     struct Player {
