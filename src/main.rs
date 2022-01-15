@@ -1,4 +1,5 @@
 mod vec2;
+mod protocol;
 
 pub mod algae {
     use std::{time};
@@ -6,6 +7,7 @@ pub mod algae {
     use simple_websockets::{Event, EventHub, Responder, Message};
     use std::collections::HashMap;
     use crate::vec2::Vec2;
+    use crate::protocol::{ServerOpcode, ClientOpcode};
 
     fn string_at(bytes: &[u8], mut i: usize) -> &str {
         let len = bytes.len();
@@ -83,26 +85,26 @@ pub mod algae {
                                 // println!("Received a message from client #{}: {:?}", client_id, message);
                                 let client = self.clients.get_mut(&client_id).unwrap();
                                 if let Message::Binary(bytes) = message {
-                                    let id = bytes[0];
-                                    match id {
-                                        254 => {
-
+                                    let opcode = ClientOpcode::from(bytes[0]);
+                                    match opcode {
+                                        ClientOpcode::VersionHandshake => {
+                                            // todo
                                         }
-                                        255 => {
-
+                                        ClientOpcode::Handshake2 => {
+                                            // ignore
                                         }
-                                        0 => {
+                                        ClientOpcode::Play => {
                                             let name = string_at(&bytes, 1);
                                             println!("play msg name: {}", name);
                                             let mouse = Vec2 {x: 0f32, y: 0f32};
                                             let player = Player {name: name.to_string(), mouse};
                                             client.player = Some(player);
                                         }
-                                        16 => {
+                                        ClientOpcode::MousePos => {
                                             //todo! handle mouse input
                                         },
                                         _ => {
-                                            println!("unknown message id: {}, msg: {:?}", id, bytes);
+                                            println!("unknown opcode: {:?}, msg: {:?}", opcode, bytes);
                                         }
                                     }
                                 }
