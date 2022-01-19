@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 simple-websockets = "0.1.4"
+const_format = "0.2.22"
