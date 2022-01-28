@@ -1,6 +1,6 @@
 #[derive(PartialEq, PartialOrd, Debug)]
 #[repr(u8)]
-pub enum ServerOpcode {
+pub enum ServerOpcode { // From server to client
     Update = 16,
 }
 #[derive(PartialEq, PartialOrd, Debug)]

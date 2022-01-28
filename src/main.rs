@@ -1,5 +1,6 @@
 mod vec2;
 mod protocol;
+mod quadtree;
 
 pub mod algae {
     const SERVER_PORT: u16 = 8080;
@@ -12,6 +13,7 @@ pub mod algae {
     use std::collections::HashMap;
     use crate::vec2::Vec2;
     use crate::protocol::{ServerOpcode, ClientOpcode};
+    use crate::quadtree::{Circle, AABB, LooseQuadtreeNode, Shape};
 
     fn string_at(bytes: &[u8], mut i: usize) -> &str {
         let len = bytes.len();
@@ -28,13 +30,23 @@ pub mod algae {
 
     struct Cell {
         id: u32,
-        pos: Vec2<f32>,
-        r: f32,
+        body: Circle,
+    }
+    impl Shape for Cell {
+        fn overlaps(&self, aabb: &AABB) -> bool {
+            self.body.overlaps(aabb)
+        }
+        fn contains(&self, point: &Vec2) -> bool {
+            self.body.contains(point)
+        }
+        fn contained_by(&self, aabb: &AABB) -> bool {
+            self.body.contained_by(aabb)
+        }
     }
 
     struct Player {
         name: String,
-        mouse: Vec2<f32>,
+        mouse: Vec2,
         cell_ids: Vec<u32>
     }
 
@@ -119,7 +131,7 @@ pub mod algae {
                                             self.last_id += 1;
                                             let id = self.last_id;
                                             let pos = Vec2{x: 0f32, y: 0f32};
-                                            let cell = Cell{id, pos, r: CELL_START_R};
+                                            let cell = Cell{id, body: Circle{pos, r: CELL_START_R}};
                                             player.cell_ids.push(cell.id);
 
                                             client.player = Some(player);
@@ -140,6 +152,14 @@ pub mod algae {
             }
 
             // todo!("game logic");
+            let map_pos = Vec2::new(-700.0, -700.0);
+            let map = AABB{ pos: map_pos, size: Vec2::new(1400.0, 1400.0) };
+            let qt = LooseQuadtreeNode::<Cell>::new(map);
+
+            for cell in self.cells_by_id.values() {
+
+            }
+
             // todo!("send updates to clients");
             let _tick_duration = frame_start.elapsed();
             // println!("finished tick with duration: {:?}", tick_duration);
